@@ -9,8 +9,23 @@ from Crypto.Cipher import AES
 #custom error
 class SymmetricChiperError(Exception):
   '''Error executing the script'''
+
 class ValidationError(SymmetricChiperError):
     '''invalid input'''
+
+prompt = '''What do you want to do?
+  1 -> encrypt
+  2 -> decrypt
+  0 -> quit
+  -> '''
+promptMethod = '''Which method do you choose?
+  1 -> No authentication
+  2 -> Authentication
+  0 -> quit
+-> '''
+promptKeyFilePath = 'What is the path to the key file?\t'
+promptCtFilePath = 'What is the path to the cipher text file?\t'
+promptPtFilePath = 'What is the path to the plain text file?\t'
 
 
 def read_file(path, mode):
@@ -59,83 +74,98 @@ def checkPath(path):
   return state
 
 '''
-  Questa funzione ripete la stessa operazione finchè non si ottiene il risultato desiderato, espresso in correctState
+  The purpose of this function is to repeat the input of a path until checkPath returns an acceptable value
+  parameters:
+  - propt: the message to show in console
+  - correctState: acceptable values as a result of checkPath. The parameter must be a string, like '03' if the 0 and 3 are acceptable valus 
+  return the path and the state of checkPath
 '''
-def repeatCheckPathUntil(prompt, correctState):
+def repeatCP(prompt, correctState):
   path = input(prompt)
   state = checkPath(path)
   while not str(state) in str(correctState):
     print('\tError: The path is not correct. Please try again!')
-    state = repeatCheckPathUntil(prompt, correctState)[1]
+    path, state = repeatCP(prompt, correctState)
   return path, state
 
 
-def encrypt(plaintext):
+'''
+  Encrypt the message using the chacha20 cipher and save the result in the specified file
+'''
+def encrypt(pt, keyFilePath, ctFilePath):
   key = get_random_bytes(32)
-  
-  keyPath = repeatCheckPathUntil('What is the name of the file to save the key in: ', '03')[0]
-  write_file(keyPath, 'wb', key)
+  write_file(keyFilePath, 'wb', key)
   
   cipher = ChaCha20.new(key=key)
-  ciphertext = cipher.encrypt(plaintext)
+  ciphertext = cipher.encrypt(pt)
   nonce = b64encode(cipher.nonce).decode('utf-8')
   ct = b64encode(ciphertext).decode('utf-8')
+  
   result = json.dumps({'nonce':nonce, 'ciphertext':ct})
-  
-  outputPath, state = repeatCheckPathUntil('Where you want save the ciphertext?', '013')
-    
-  if(state == 1):
-      outputPath += 'ciphertext.txt'
-  
+  write_file(ctFilePath, 'w', result)
+  print('The ciphertext is: ' + ct)
 
-  write_file(outputPath, 'w', result)
-  print(result)
+'''
+  Encrypt the message using the AES cipher in EAX mode and save the result in the specified file
+'''
+def encryptAuth(plaintext, keyFilePath, outFilePath):
+  key = get_random_bytes(16)
+  write_file(keyFilePath, 'wb', key)
+  
+  cipher = AES.new(key, AES.MODE_EAX)
+  ciphertext, tag = cipher.encrypt_and_digest(str(plaintext).encode('ascii'))
+  
+  nonce = b64encode(cipher.nonce).decode('utf-8')
+  ct = b64encode(ciphertext).decode('utf-8')
+  tag = b64encode(tag).decode('utf-8')
+  
+  result = json.dumps({'nonce':nonce, 'ciphertext':ct, 'tag':tag})
+  write_file(outFilePath, 'w', result)
+  print('The ciphertext is: ' + ct)
 
-def decrypt():
-  keyPath = repeatCheckPathUntil("In which file did you save the key", "0")[0]
-  jsonInputPath = repeatCheckPathUntil("In which file did you save the cipher text", "0")[0]
-  key = read_file(keyPath, 'rb')
-  jsonInput = read_file(jsonInputPath, 'r')
+
+'''
+  Decrypt the message using the chacha20 cipher and print the result in console
+'''
+def decrypt(keyFilePath, jsonInFilePath):
+  key = read_file(keyFilePath, 'rb')
+  jsonInput = read_file(jsonInFilePath, 'r')
   
   try:
     b64 = json.loads(jsonInput)
     nonce = b64decode(b64['nonce'])
     ciphertext = b64decode(b64['ciphertext'])
+    
     cipher = ChaCha20.new(key=key, nonce=nonce)
     plaintext = cipher.decrypt(ciphertext)
     print("The message was " + plaintext.decode('utf-8'))
   except (ValueError, KeyError):
     print("Incorrect decryption")
 
-def encryptAuth(data):
-  key = get_random_bytes(16)
-  cipher = AES.new(key, AES.MODE_EAX)
-  nonce = cipher.nonce
-  ciphertext, tag = cipher.encrypt_and_digest(data)
-  print(ciphertext)
-  decryptAuth(key, nonce, ciphertext, tag)
-
-def decryptAuth(key, nonce, ciphertext, tag):
-  cipher = AES.new(key, AES.MODE_EAX, nonce=nonce)
-  plaintext = cipher.decrypt(ciphertext)
+'''
+  Decrypt the message using the AES cipher in EAX and print the result in console
+'''
+def decryptAuth(keyFilePath, jsonInFilePath):
+  key = read_file(keyFilePath, 'rb')
+  jsonInput = read_file(jsonInFilePath, 'r')
+  
   try:
+    nonce = b64decode(json.loads(jsonInput)['nonce'])
+    ct = b64decode(json.loads(jsonInput)['ciphertext'])
+    tag = b64decode(json.loads(jsonInput)['tag'])
+  except:
+    raise SymmetricChiperError('\tError: The ciphertext was not encrypted with authentication')
+  
+  cipher = AES.new(key, AES.MODE_EAX, nonce=nonce)
+  try:
+    plaintext = cipher.decrypt(ct).decode('utf-8').lstrip('b').strip("'")
+    
     cipher.verify(tag)
-    print("The message is authentic:", plaintext.decode('utf-8'))
+    print("The message is authentic:", plaintext)
   except ValueError:
     print("Key incorrect or message corrupted")
 
 
-
-prompt = '''What do you want to do?
-1 -> encrypt
-2 -> decrypt
-0 -> quit
--> '''
-promptMethod = '''Which method do you choose?
-  1 -> No authentication
-  2 -> Authentication
-  0 -> quit
--> '''
 
 
 # main
@@ -145,25 +175,34 @@ while True:
   try:
     if choice == '1':
       
-      choiceMethod = input(promptMethod)
-      ptPath = repeatCheckPathUntil("Where is the plaintext path?", '0')[0]
-      pt = read_file(ptPath, 'rb')
+      ptFilePath = repeatCP(promptPtFilePath, '0')[0]   
+      pt = read_file(ptFilePath, 'rb')
       
+      choiceMethod = input(promptMethod)
+      
+      keyFilePath = repeatCP(promptKeyFilePath, '03')[0]
+      ctFilePath, state = repeatCP(promptCtFilePath, '013')
+      if(state == 1):
+          ctFilePath += 'ciphertext.txt'
+            
       if choiceMethod == '1':
-        encrypt(pt)
+        encrypt(pt, keyFilePath, ctFilePath)
         
       elif choiceMethod == '2':
-        encryptAuth(pt)
+        encryptAuth(pt, keyFilePath, ctFilePath)
         
     elif choice == '2':
       
       choiceMethod = input(promptMethod)
       
+      keyFilePath = repeatCP(promptKeyFilePath, "0")[0]
+      ctFilePath = repeatCP(promptCtFilePath, "0")[0]
+        
       if choiceMethod == '1':
-        decrypt()
+        decrypt(keyFilePath, ctFilePath)
       
       elif choiceMethod == '2':
-        decryptAuth()
+        decryptAuth(keyFilePath, ctFilePath)
       
     elif choice == '0':
       exit()
@@ -173,3 +212,4 @@ while True:
       
   except SymmetricChiperError as e:
     print(e)
+  print('\n\t\t--------------------------------------------------\n')
