@@ -161,6 +161,7 @@ def decryptAuth(keyFilePath, jsonInFilePath):
     plaintext = cipher.decrypt(ct).decode('utf-8').lstrip('b').strip("'")
     
     cipher.verify(tag)
+    print/type(plaintext)
     print("The message is authentic:", plaintext)
   except ValueError:
     print("Key incorrect or message corrupted")
