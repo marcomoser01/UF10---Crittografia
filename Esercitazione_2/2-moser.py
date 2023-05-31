@@ -1,8 +1,7 @@
 # --Symmetric Encryption--
 
 # import cryptography modules
-from Crypto.Cipher import ChaCha20, AES
-from Crypto.Random import get_random_bytes
+from Crypto.Cipher import AES
 from Crypto.Protocol.KDF import scrypt
 from Crypto.Random import get_random_bytes
 from getpass import getpass
@@ -96,7 +95,7 @@ def encrypt(p_data, key = '', salt = ''):
     '''
         function that performs encryption
         parameters:
-        p_data: plaintext
+        - p_data: plaintext
     '''
     
     # encryption
@@ -112,8 +111,8 @@ def check_c_len(data, c_len):
     '''
         function that validates ciphertext file length
         parameters:
-        data: byte string to check
-        c_len: length in bytes the key must have
+        - data: byte string to check
+        - c_len: length in bytes the key must have
     '''
     
     if len(data) < c_len:
@@ -127,7 +126,7 @@ def decrypt(c_data, key = ''):
     '''
         function that performs decryption
         parameters:
-        c_data: ciphertext
+        - c_data: ciphertext
     '''
     
     # decryption
@@ -144,14 +143,20 @@ def decrypt(c_data, key = ''):
     print(write_file(gen_prompt("decrypted data", False), p_data))
 
 
+
 def getKeyByPsw(psw, salt = ''):
     '''
         This method generate a key from a password
-        parameters:
-        psw: password
-        salt: if not specified or the length is incorrect it will generate a new 16 byte salt
-        returns the generated key and the salt
+        Parameters:
+        - psw: password
+        - salt: if not specified or the length is incorrect it will generate a new 16 byte salt
+        
+        Returns:
+        - the generated key and the salt
     '''
+    
+    if not isinstance(psw, str):
+        raise TypeError("The argument 'psw' must be a string.")
     
     if len(salt) != 16:
         salt = get_random_bytes(16)
