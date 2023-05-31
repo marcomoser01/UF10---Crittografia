@@ -158,7 +158,12 @@ def decryptAuth(keyFilePath, jsonInFilePath):
     plaintext = cipher.decrypt(ct).decode('utf-8').lstrip('b').strip("'")
     
     cipher.verify(tag)
+<<<<<<< HEAD:Esercitazione 1/1-moser.py
+    print/type(plaintext)
+    print("The message is authentic:", plaintext)
+=======
     print("The message is: ", plaintext)
+>>>>>>> a439e168288ef6cbe9308057f206239940e66e5c:Esercitazione_1/1-moser.py
   except ValueError:
     print("Key incorrect or message corrupted")
 
